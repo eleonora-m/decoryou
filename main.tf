@@ -1,4 +1,3 @@
-cat > main.tf << 'EOF'
 # ECR Repository
 resource "aws_ecr_repository" "decoryou" {
   name                 = "decoryou"
@@ -35,11 +34,10 @@ resource "aws_eks_cluster" "decoryou" {
   role_arn                  = aws_iam_role.eks_cluster.arn
   version                   = "1.30"
   vpc_config {
-    subnet_ids              = ["subnet-01234567", "subnet-01234568"]
     endpoint_private_access = false
     endpoint_public_access  = true
     public_access_cidrs     = ["0.0.0.0/0"]
   }
   depends_on = [aws_iam_role_policy_attachment.eks_cluster_policy]
 }
-EOF
+
