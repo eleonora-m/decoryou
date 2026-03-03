@@ -41,3 +41,22 @@ resource "aws_eks_cluster" "decoryou" {
   ]
 }
 
+# EKS Cluster (для демонстрации с минимальным vpc_config)
+resource "aws_eks_cluster" "decoryou" {
+  name     = "decoryou-cluster"
+  role_arn = aws_iam_role.eks_cluster.arn
+  version  = "1.30"
+
+  vpc_config {
+    # Минимальные значения для terraform plan
+    subnet_ids             = ["subnet-01234567", "subnet-01234568"]
+    endpoint_private_access = false
+    endpoint_public_access  = true
+    public_access_cidrs    = ["0.0.0.0/0"]
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_cluster_policy,
+  ]
+}
+
