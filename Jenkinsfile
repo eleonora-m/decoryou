@@ -1,11 +1,15 @@
 pipeline {
-    agent any
+    // Best practice: restrict to an agent with the required tools installed
+    agent { label 'docker-and-terraform-node' } 
+    
     environment {
         IMAGE_NAME = "decoryou"
         IMAGE_TAG  = "7"
+        // Example: Preparing to use AWS credentials for Terraform
+        // AWS_CREDENTIALS = credentials('my-aws-credentials-id') 
     }
+    
     stages {
-
         stage('Check Docker') {
             steps {
                 script {
@@ -44,13 +48,22 @@ pipeline {
 
         stage('Terraform Plan') {
             steps {
-                sh 'terraform init'
-                sh 'terraform plan'
+                // Example of wrapping Terraform in credentials
+                // withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'my-aws-credentials-id']]) {
+                    sh 'terraform init'
+                    
+                    // Passing the newly built image tag to Terraform as a variable
+                    sh 'terraform plan -var="docker_image_tag=${IMAGE_TAG}" -out=tfplan'
+                // }
             }
         }
     }
 
     post {
+        always {
+            // Good practice: Clean up the workspace to prevent disk space issues on the agent
+            cleanWs()
+        }
         failure {
             echo '❌ Pipeline failed'
         }
