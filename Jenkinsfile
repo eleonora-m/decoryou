@@ -1,40 +1,29 @@
 pipeline {
-    // Best practice: restrict to an agent with the required tools installed
-    agent any
+    agent any 
     
     environment {
         IMAGE_NAME = "decoryou"
         IMAGE_TAG  = "7"
-        // Example: Preparing to use AWS credentials for Terraform
-        // AWS_CREDENTIALS = credentials('my-aws-credentials-id') 
     }
     
     stages {
         stage('Check Docker') {
             steps {
                 script {
-                    // Проверяем доступность Docker CLI
+                    // Проверяем наличие Docker CLI
                     def dockerExists = sh(script: 'which docker', returnStatus: true)
                     if (dockerExists != 0) {
-                        error """
-                        ❌ Docker CLI not found on this agent!
-                        Make sure Docker is installed and accessible.
-                        If Jenkins runs in a container, mount /var/run/docker.sock
-                        and install docker CLI inside container.
-                        """
+                        error "❌ Docker CLI не найден! Проверь установку в кастомном образе."
                     } else {
-                        echo "✅ Docker CLI found"
+                        echo "✅ Docker CLI найден"
                     }
 
-                    // Проверяем доступ к Docker daemon
+                    // Проверяем доступ к сокету Docker
                     def dockerPing = sh(script: 'docker info > /dev/null 2>&1', returnStatus: true)
                     if (dockerPing != 0) {
-                        error """
-                        ❌ Cannot connect to Docker daemon!
-                        Make sure the user has permissions or /var/run/docker.sock is mounted.
-                        """
+                        error "❌ Нет доступа к Docker daemon! Проверь монтирование /var/run/docker.sock"
                     } else {
-                        echo "✅ Docker daemon accessible"
+                        echo "✅ Docker daemon доступен"
                     }
                 }
             }
@@ -42,33 +31,33 @@ pipeline {
 
         stage('Docker Build') {
             steps {
+                // Сборка образа из Dockerfile, который лежит в корне репозитория
                 sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
             }
         }
 
         stage('Terraform Plan') {
             steps {
-                // Example of wrapping Terraform in credentials
-                // withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'my-aws-credentials-id']]) {
-                    sh 'terraform init'
-                    
-                    // Passing the newly built image tag to Terraform as a variable
-                    sh 'terraform plan -var="docker_image_tag=${IMAGE_TAG}" -out=tfplan'
-                // }
+                // Используем dir('terraform'), так как твои .tf файлы лежат в этой папке
+                dir('terraform') {
+                    // -upgrade нужен, чтобы перекачать плагины с Mac на Linux
+                    sh 'terraform init -upgrade'
+                    sh "terraform plan -var='docker_image_tag=${IMAGE_TAG}' -out=tfplan"
+                }
             }
         }
     }
 
     post {
         always {
-            // Good practice: Clean up the workspace to prevent disk space issues on the agent
+            // Очистка рабочего пространства после сборки
             cleanWs()
         }
-        failure {
-            echo '❌ Pipeline failed'
-        }
         success {
-            echo '✅ Pipeline completed successfully'
+            echo '✅ Пайплайн успешно завершен!'
+        }
+        failure {
+            echo '❌ Ошибка в пайплайне'
         }
     }
 }
