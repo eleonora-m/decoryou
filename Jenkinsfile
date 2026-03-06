@@ -1,6 +1,6 @@
 pipeline {
     // Best practice: restrict to an agent with the required tools installed
-    agent { label 'docker-and-terraform-node' } 
+    agent any
     
     environment {
         IMAGE_NAME = "decoryou"
