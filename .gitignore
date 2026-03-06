@@ -1,4 +1,4 @@
+# Ignore local Terraform cache and state
 .terraform/
-.terraform.lock.hcl
 *.tfstate
 *.tfstate.backup
