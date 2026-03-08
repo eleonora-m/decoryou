@@ -48,8 +48,8 @@ ssh_cidr_blocks     = ["0.0.0.0/0"] # Restrict to your IP in production
 # ============================================================================
 
 instance_type      = "t3.medium"                    # EC2 instance type
-ami_id             = "ami-0c94855ba95c574c8"       # Amazon Linux 2 AMI (update for your region)
-key_pair_name      = "your-keypair-name"           # EC2 Key Pair
+ami_id             = "your_value_here"       # Amazon Linux 2 AMI (update for your region)
+key_pair_name      = "your_value_here"           # EC2 Key Pair
 
 desired_capacity   = 2              # Desired number of instances
 min_size           = 1              # Minimum instances in ASG

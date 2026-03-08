@@ -1,0 +1,34 @@
+title = "gitleaks config"
+
+[[rules]]
+    description = "AWS Access Key ID"
+    regex = '''AKIA[0-9A-Z]{16}'''
+    tags = ["aws", "key"]
+
+[[rules]]
+    description = "AWS Secret Access Key"
+    regex = '''(?i)aws_secret_access_key[=\s]*['"]?[A-Za-z0-9/+=]{40}['"]?'''
+    tags = ["aws", "secret"]
+
+[[rules]]
+    description = "Docker Hub Token"
+    regex = '''dckr_pat_[A-Za-z0-9_-]{27}'''
+    tags = ["docker", "token"]
+
+[[rules]]
+    description = "Ansible Vault Password"
+    regex = '''ansible_vault_password[=\s]*['"]?[A-Za-z0-9_-]{20,}['"]?'''
+    tags = ["ansible", "vault"]
+
+[[rules]]
+    description = "SMTP Password"
+    regex = '''smtp_password[=\s]*['"]?[A-Za-z0-9_-]{10,}['"]?'''
+    tags = ["smtp", "password"]
+
+[allowlist]
+    paths = [
+        '''\.env\.example''',
+        '''terraform\.tfvars\.example''',
+        '''README\.md''',
+        '''docs/''',
+    ]

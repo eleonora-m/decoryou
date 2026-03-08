@@ -1,0 +1,24 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+        name: gitleaks
+        description: Detect secrets in code
+        entry: gitleaks detect --config .gitleaks.toml --verbose
+        language: system
+        pass_filenames: false
+        stages: [commit]
+        args: [--config=.gitleaks.toml, --verbose]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks-full-scan
+        name: gitleaks-full-history
+        description: Scan full git history for secrets (run once)
+        entry: gitleaks detect --config .gitleaks.toml --verbose --no-git
+        language: system
+        pass_filenames: false
+        stages: [manual]
+        args: [--config=.gitleaks.toml, --verbose, --no-git]

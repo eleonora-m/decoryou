@@ -7,6 +7,18 @@ pipeline {
     }
     
     stages {
+        stage('Security Scan') {
+            steps {
+                script {
+                    def gitleaksExists = sh(script: 'which gitleaks', returnStatus: true)
+                    if (gitleaksExists != 0) {
+                        error "❌ Gitleaks not found! Install gitleaks in the Jenkins agent."
+                    }
+                    sh 'gitleaks detect --config .gitleaks.toml --verbose --redact'
+                }
+            }
+        }
+
         stage('Check Docker') {
             steps {
                 script {
