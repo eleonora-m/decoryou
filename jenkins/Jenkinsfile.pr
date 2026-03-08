@@ -1,0 +1,156 @@
+pipeline {
+    agent {
+        docker {
+            image 'hashicorp/terraform:1.7.0'
+            args '-v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
+
+    environment {
+        AWS_REGION = credentials('aws-region')
+        AWS_ACCOUNT_ID = credentials('aws-account-id')
+        APP_NAME = 'decoryou'
+        DOCKER_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        DOCKER_IMAGE_NAME = "${DOCKER_REGISTRY}/${APP_NAME}"
+        TF_VERSION = '1.7.0'
+        TF_INPUT = 'false'
+        TF_IN_AUTOMATION = 'true'
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        timeout(time: 30, unit: 'MINUTES')
+        timestamps()
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo "🔄 Checking out PR branch..."
+                checkout scm
+                script {
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+        }
+
+        stage('Lint & Format Check') {
+            parallel {
+                stage('Terraform') {
+                    steps {
+                        sh '''
+                            echo "📋 Terraform format check..."
+                            cd terraform
+                            terraform fmt -check -recursive -diff .
+                        '''
+                    }
+                }
+                stage('Ansible') {
+                    steps {
+                        sh '''
+                            echo "📋 Ansible lint check..."
+                            if command -v ansible-lint &> /dev/null; then
+                                ansible-lint --config-file .ansible-lint .
+                            fi
+                        '''
+                    }
+                }
+                stage('Dockerfile') {
+                    steps {
+                        sh '''
+                            echo "📋 Dockerfile lint..."
+                            if command -v hadolint &> /dev/null; then
+                                hadolint docker/Dockerfile
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Security Scan') {
+            parallel {
+                stage('Terraform Security') {
+                    steps {
+                        sh '''
+                            echo "🔒 tfsec scan..."
+                            cd terraform
+                            if command -v tfsec &> /dev/null; then
+                                tfsec . -f json --out tfsec-report.json || true
+                            fi
+                        '''
+                    }
+                }
+                stage('Secret Check') {
+                    steps {
+                        sh '''
+                            echo "🔒 Secret scanning..."
+                            if command -v git-secrets &> /dev/null; then
+                                git secrets --scan
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Validation') {
+            steps {
+                sh '''
+                    echo "✓ Validating Terraform configuration..."
+                    cd terraform
+                    terraform init -backend=false
+                    terraform validate
+                    terraform fmt -check -recursive .
+                '''
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                sh '''
+                    if [ -d "tests" ]; then
+                        bash tests/run_tests.sh
+                    fi
+                '''
+            }
+        }
+
+        stage('Docker Build (No Push)') {
+            steps {
+                sh '''
+                    echo "🐳 Building Docker image (validation only)..."
+                    docker build \
+                        -f docker/Dockerfile \
+                        -t decoryou:pr-${GIT_COMMIT_SHORT} \
+                        --no-cache \
+                        .
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo "🧹 Cleanup..."
+                cleanWs()
+            }
+        }
+        
+        failure {
+            script {
+                echo "❌ PR validation failed - review errors above"
+            }
+        }
+        
+        success {
+            script {
+                echo "✅ PR validation passed - ready for review"
+            }
+        }
+    }
+}

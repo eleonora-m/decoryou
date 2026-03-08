@@ -1,0 +1,65 @@
+---
+# Docker role - Install and configure Docker
+
+- name: Ensure Docker service is installed
+  package:
+    name: docker
+    state: present
+  tags: ['docker', 'packages']
+
+- name: Enable Docker service
+  service:
+    name: docker
+    state: started
+    enabled: yes
+  tags: ['docker', 'service']
+
+- name: Create docker group
+  group:
+    name: docker
+    state: present
+  tags: ['docker', 'users']
+
+- name: Add ec2-user to docker group
+  user:
+    name: ec2-user
+    groups: docker
+    append: yes
+  tags: ['docker', 'users']
+
+- name: Configure Docker daemon JSON
+  copy:
+    content: |
+      {
+        "log-driver": "awslogs",
+        "log-opts": {
+          "awslogs-group": "/aws/{{ app_name }}/{{ app_environment }}/container",
+          "awslogs-stream": "{{ ansible_ec2_instance_id | default('default') }}"
+        },
+        "storage-driver": "overlay2",
+        "live-restore": true,
+        "userland-proxy": false
+      }
+    dest: /etc/docker/daemon.json
+  notify: restart docker
+  tags: ['docker', 'config']
+
+- name: Create Docker networks
+  docker_network:
+    name: "{{ docker_network }}"
+    state: present
+  tags: ['docker', 'network']
+
+- name: Configure Docker to use ECR
+  shell: |
+    aws ecr get-login-password --region {{ aws_region }} | \
+    docker login --username AWS --password-stdin {{ docker_registry }}
+  environment:
+    AWS_DEFAULT_REGION: "{{ aws_region }}"
+  tags: ['docker', 'ecr']
+
+- name: Pull application image
+  docker_image:
+    name: "{{ docker_image }}"
+    source: pull
+  tags: ['docker', 'images']

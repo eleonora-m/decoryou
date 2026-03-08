@@ -1,0 +1,63 @@
+---
+# Main site play for decoryou infrastructure
+# Orchestrates deployment across all hosts
+
+- name: Decoryou Infrastructure Deployment
+  hosts: all
+  become: true
+  
+  vars_files:
+    - vars/common.yml
+  
+  pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg: |
+          ========================================
+          Deploying {{ app_name }} to {{ app_environment }}
+          Version: {{ deployment_version }}
+          ========================================
+      run_once: yes
+
+  roles:
+    - { role: common, tags: ['always'] }
+
+  post_tasks:
+    - name: Health check
+      uri:
+        url: "http://localhost:{{ app_port }}/health"
+        status_code: 200
+      retries: 5
+      delay: 10
+      register: health_check_result
+      tags: ['health_check']
+
+    - name: Deployment summary
+      debug:
+        msg: |
+          ✅ Deployment completed successfully
+          Environment: {{ app_environment }}
+          App: {{ app_name }}
+          Version: {{ deployment_version }}
+      run_once: yes
+
+  handlers:
+    - name: restart docker
+      service:
+        name: docker
+        state: restarted
+
+# Deploy Docker containers
+- name: Deploy Docker Containers
+  hosts: webservers
+  become: true
+  
+  roles:
+    - { role: docker, tags: ['docker'] }
+    - { role: app, tags: ['app'] }
+  
+  handlers:
+    - name: restart app container
+      docker_container:
+        name: "{{ app_name }}"
+        state: restarted

@@ -1,0 +1,135 @@
+---
+# Common role - System base configuration
+# Performs baseline system setup on all hosts
+
+- name: Ensure system packages are up to date
+  yum:
+    name: "*"
+    state: latest
+  tags: ['common', 'packages']
+
+- name: Install required system packages
+  yum:
+    name:
+      - git
+      - curl
+      - wget
+      - jq
+      - vim
+      - tmux
+      - htop
+      - docker
+      - awscli
+      - amazon-cloudwatch-agent
+      - amazon-ssm-agent
+    state: present
+  tags: ['common', 'packages']
+
+- name: Enable Amazon SSM for Systems Manager
+  service:
+    name: amazon-ssm-agent
+    state: started
+    enabled: yes
+  tags: ['common', 'ssm']
+
+- name: Configure CloudWatch agent
+  copy:
+    content: |
+      {
+        "logs": {
+          "logs_collected": {
+            "files": {
+              "collect_list": [
+                {
+                  "file_path": "/var/log/messages",
+                  "log_group_name": "/aws/{{ app_name }}/{{ app_environment }}/system",
+                  "log_stream_name": "{instance_id}"
+                }
+              ]
+            }
+          }
+        }
+      }
+    dest: /opt/aws/amazon-cloudwatch-agent/etc/config.json
+  tags: ['common', 'monitoring']
+
+- name: Start and enable CloudWatch agent
+  service:
+    name: amazon-cloudwatch-agent
+    state: started
+    enabled: yes
+  tags: ['common', 'monitoring']
+
+- name: Set up system limits
+  lineinfile:
+    path: /etc/security/limits.conf
+    line: "{{ item }}"
+    state: present
+  loop:
+    - "* soft nofile 65536"
+    - "* hard nofile 65536"
+    - "* soft nproc 4096"
+    - "* hard nproc 4096"
+  tags: ['common', 'tuning']
+
+- name: Configure sysctl for performance
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_set: yes
+  loop:
+    - { key: "net.core.somaxconn", value: "2048" }
+    - { key: "net.ipv4.tcp_max_syn_backlog", value: "2048" }
+    - { key: "vm.swappiness", value: "10" }
+  tags: ['common', 'tuning']
+
+- name: Configure NTP
+  package:
+    name: chrony
+    state: present
+  tags: ['common', 'ntp']
+
+- name: Start and enable NTP service
+  service:
+    name: chronyd
+    state: started
+    enabled: yes
+  tags: ['common', 'ntp']
+
+- name: Set timezone to UTC
+  timezone:
+    name: UTC
+  tags: ['common', 'timezone']
+
+- name: Create application directory
+  file:
+    path: "/opt/{{ app_name }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags: ['common', 'directories']
+
+- name: Create logging directory
+  file:
+    path: "/var/log/{{ app_name }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags: ['common', 'directories']
+
+- name: Configure log rotation
+  copy:
+    content: |
+      /var/log/{{ app_name }}/*.log {
+          daily
+          rotate 30
+          missingok
+          notifempty
+          compress
+          delaycompress
+          copytruncate
+      }
+    dest: "/etc/logrotate.d/{{ app_name }}"
+  tags: ['common', 'logging']

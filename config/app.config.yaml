@@ -1,0 +1,54 @@
+# Application Configuration
+# File: config/app.config.yaml
+
+application:
+  name: decoryou
+  version: ${VERSION:-1.0.0}
+  environment: ${APP_ENVIRONMENT:-development}
+  port: ${PORT:-80}
+  log_level: ${LOG_LEVEL:-info}
+
+database:
+  host: ${DB_HOST:-localhost}
+  port: ${DB_PORT:-3306}
+  name: ${DB_NAME:-decoryou}
+  user: ${DB_USER:-decoryou}
+  password: ${DB_PASSWORD:-}
+  pool_size: 10
+  max_overflow: 20
+
+cache:
+  redis:
+    host: ${REDIS_HOST:-localhost}
+    port: ${REDIS_PORT:-6379}
+    database: 0
+    ttl: 3600
+
+storage:
+  s3:
+    region: ${AWS_REGION:-us-east-1}
+    bucket: ${S3_BUCKET:-decoryou-dev}
+    acl: private
+    encryption: AES256
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:-change-me-in-production}
+    expiration: 86400
+  session:
+    secret: ${SESSION_SECRET:-change-me-in-production}
+    ttl: 86400
+
+monitoring:
+  prometheus:
+    enabled: true
+    port: 9090
+  health_check:
+    path: /health
+    interval: 30
+    timeout: 10
+
+features:
+  analytics: ${FEATURE_ANALYTICS:-true}
+  notifications: ${FEATURE_NOTIFICATIONS:-true}
+  advanced_reporting: ${FEATURE_ADVANCED_REPORTING:-false}

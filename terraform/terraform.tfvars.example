@@ -1,0 +1,106 @@
+# terraform.tfvars.example
+# 
+# Example Terraform variables file for decoryou project.
+# Copy this file to terraform/environments/{dev,staging,prod}/terraform.tfvars
+# and update values according to your environment.
+#
+# ⚠️  IMPORTANT: Never commit actual credentials or sensitive values.
+#     Use AWS Secrets Manager or Jenkins Credentials for secrets.
+
+# ============================================================================
+# GENERAL CONFIGURATION
+# ============================================================================
+
+aws_region   = "us-east-1"        # AWS region to deploy to
+environment  = "dev"              # dev, staging, or prod
+project_name = "decoryou"          # Project identifier
+owner        = "DevOps Team"       # Owner/team name
+cost_center  = "engineering"       # Cost center for billing
+
+# ============================================================================
+# VPC & NETWORKING
+# ============================================================================
+
+vpc_cidr            = "10.0.0.0/16"  # VPC CIDR block
+availability_zones  = [
+  "us-east-1a",
+  "us-east-1b",
+  "us-east-1c"
+]
+public_subnet_cidrs = [
+  "10.0.1.0/24",
+  "10.0.2.0/24",
+  "10.0.3.0/24"
+]
+private_subnet_cidrs = [
+  "10.0.11.0/24",
+  "10.0.12.0/24",
+  "10.0.13.0/24"
+]
+
+enable_nat_gateway  = true          # Enable NAT for private subnets
+enable_vpn_gateway  = false         # Enable VPN gateway
+enable_flow_logs    = true          # Enable VPC Flow Logs
+ssh_cidr_blocks     = ["0.0.0.0/0"] # Restrict to your IP in production
+
+# ============================================================================
+# EC2 CONFIGURATION
+# ============================================================================
+
+instance_type      = "t3.medium"                    # EC2 instance type
+ami_id             = "ami-0c94855ba95c574c8"       # Amazon Linux 2 AMI (update for your region)
+key_pair_name      = "your-keypair-name"           # EC2 Key Pair
+
+desired_capacity   = 2              # Desired number of instances
+min_size           = 1              # Minimum instances in ASG
+max_size           = 4              # Maximum instances in ASG
+
+# ============================================================================
+# APPLICATION CONFIGURATION
+# ============================================================================
+
+app_port           = 80                            # Application port
+docker_image       = "nginx:latest"                # Docker image URI
+
+# ============================================================================
+# LOAD BALANCER
+# ============================================================================
+
+enable_alb_deletion_protection = false  # false in dev, true in prod
+
+# ============================================================================
+# S3 CONFIGURATION
+# ============================================================================
+
+create_s3_app_bucket            = true   # Application data bucket
+create_terraform_state_bucket   = true   # Terraform state bucket
+create_artifacts_bucket         = true   # Build artifacts bucket
+
+s3_enable_versioning            = true   # Enable S3 versioning
+s3_enable_encryption            = true   # Enable S3 encryption
+s3_enable_mfa_delete            = false  # false in dev, true in prod
+
+# ============================================================================
+# EKS CONFIGURATION (if applicable)
+# ============================================================================
+
+eks_cluster_name       = "decoryou-cluster"   # EKS cluster name
+# eks_oidc_provider_arn = "arn:aws:iam::..."  # EKS OIDC provider ARN
+
+# ============================================================================
+# LOGGING & MONITORING
+# ============================================================================
+
+log_retention_days         = 7      # CloudWatch log retention (days)
+enable_enhanced_monitoring = false  # Detailed monitoring
+
+# ============================================================================
+# TAGS
+# ============================================================================
+
+common_tags = {
+  Environment = "development"
+  ManagedBy   = "Terraform"
+  CostCenter  = "engineering"
+  Project     = "decoryou"
+}

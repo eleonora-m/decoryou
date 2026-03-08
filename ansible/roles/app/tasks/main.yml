@@ -1,0 +1,57 @@
+---
+# App role - Deploy and run the application container
+
+- name: Create application container
+  docker_container:
+    name: "{{ app_name }}"
+    image: "{{ docker_image }}"
+    state: started
+    restart_policy: always
+    ports:
+      - "{{ app_port }}:{{ app_port }}"
+    networks:
+      - name: "{{ docker_network }}"
+    env:
+      ENVIRONMENT: "{{ app_environment }}"
+      APP_VERSION: "{{ deployment_version }}"
+      LOG_LEVEL: "info"
+    log_driver: awslogs
+    log_options:
+      awslogs-group: "/aws/{{ app_name }}/{{ app_environment }}/app"
+      awslogs-stream: "{{ ansible_hostname }}"
+      awslogs-region: "{{ aws_region }}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{{ app_port }}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+  tags: ['app', 'container']
+
+- name: Wait for application to be ready
+  wait_for:
+    host: localhost
+    port: "{{ app_port }}"
+    delay: 10
+    timeout: 120
+  tags: ['app', 'health_check']
+
+- name: Verify application is responding
+  uri:
+    url: "http://localhost:{{ app_port }}/health"
+    method: GET
+    status_code: 200
+  retries: 5
+  delay: 5
+  register: app_health
+  tags: ['app', 'health_check']
+
+- name: Display application deployment status
+  debug:
+    msg: |
+      ✅ Application {{ app_name }} deployed successfully
+      URL: http://{{ ansible_host }}:{{ app_port }}
+      Environment: {{ app_environment }}
+      Version: {{ deployment_version }}
+      Health: {{ app_health.status }}
+  tags: ['app', 'info']
