@@ -57,6 +57,27 @@ make ansible-deploy ENVIRONMENT=dev
 
 ---
 
+## 🔒 Security Compliance
+
+This project implements enterprise-grade security practices specifically designed for high-stakes technical interviews at organizations like MTA. Our security posture follows industry best practices and is tailored for interviewers John Li and Hai Feng Li.
+
+### Secret Scanning
+- **GitGuardian Integration**: Automated detection of 13+ secret types (SMTP, AWS, Generic Passwords)
+- **Gitleaks Pre-commit Hooks**: Blocks commits containing secrets before they reach the repository
+- **Jenkins Pipeline Security Stage**: Mandatory secret scanning in CI/CD pipeline with failure on detection
+- **Git History Scrubbing**: Complete removal of leaked secrets using `git filter-repo`
+
+### Principle of Least Privilege (POLP)
+- **IAM Roles**: Minimal required permissions for AWS resources
+- **Ansible Vault**: Encrypted secrets management with role-based access
+- **Environment Variables**: No hardcoded credentials in Docker Compose or application code
+- **Network Security**: VPC isolation with security groups and NACLs
+- **Container Security**: Non-root users, read-only filesystems, and minimal base images
+
+All security measures are automated and enforced through CI/CD pipelines to prevent human error.
+
+---
+
 ## 🏗️ Architecture Overview
 
 ```
