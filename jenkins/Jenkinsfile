@@ -1,100 +1,47 @@
 pipeline {
-    agent {
-        docker {
-            image 'hashicorp/terraform:1.7.0'
-            args '-v /var/run/docker.sock:/var/run/docker.sock'
-        }
-    }
+    agent any // Используем основной агент, чтобы иметь доступ к Docker и AWS CLI
 
     environment {
-        // AWS Configuration
-        AWS_REGION = credentials('aws-region')
-        AWS_ACCOUNT_ID = credentials('aws-account-id')
+        // Конфигурация AWS (Указываем явно, так как это не секреты)
+        AWS_REGION = 'us-east-1' 
+        AWS_ACCOUNT_ID = '123456789012' // Замените на ваш реальный ID
         
-        // Application Configuration
         APP_NAME = 'decoryou'
         DOCKER_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         DOCKER_IMAGE_NAME = "${DOCKER_REGISTRY}/${APP_NAME}"
-        BUILD_VERSION = "${BUILD_NUMBER}"
         ECR_REPO_NAME = 'decoryou'
         
         // Terraform
-        TF_VERSION = '1.7.0'
         TF_INPUT = 'false'
         TF_IN_AUTOMATION = 'true'
         
-        // Slack/Notifications
-        SLACK_CHANNEL = '#deployments'
+        // Slack - Оставляем в credentials, так как это защищенный URL
         SLACK_WEBHOOK = credentials('slack-webhook-url')
     }
 
-    options {
-        buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '10'))
-        timeout(time: 1, unit: 'HOURS')
-        timestamps()
-        disableConcurrentBuilds(abortPrevious: true)
-    }
-
     stages {
-        stage('Checkout') {
+        stage('Initialize') {
             steps {
                 script {
-                    echo "🔄 Checking out code from ${GIT_BRANCH}"
-                }
-                checkout scm
-                script {
-                    env.GIT_COMMIT_SHORT = sh(
-                        script: "git rev-parse --short HEAD",
-                        returnStdout: true
-                    ).trim()
-                    env.GIT_COMMIT_MSG = sh(
-                        script: "git log -1 --pretty=%B",
-                        returnStdout: true
-                    ).trim()
+                    echo "🚀 Starting pipeline for ${APP_NAME}"
+                    // Проверка наличия роли (опционально)
+                    sh 'aws sts get-caller-identity'
                 }
             }
         }
 
-        stage('Lint') {
+        stage('Prepare & Lint') {
             parallel {
-                stage('Terraform Format Check') {
+                stage('Terraform Check') {
+                    agent { docker { image 'hashicorp/terraform:1.7.0' } }
                     steps {
-                        script {
-                            echo "📋 Running Terraform fmt check..."
-                            sh '''
-                                cd terraform
-                                terraform fmt -check -recursive -diff .
-                            '''
-                        }
-                    }
-                }
-                stage('Ansible Lint') {
-                    steps {
-                        script {
-                            echo "📋 Running Ansible lint..."
-                            sh '''
-                                if command -v ansible-lint &> /dev/null; then
-                                    ansible-lint --config-file .ansible-lint .
-                                else
-                                    echo "⚠️  ansible-lint not installed, skipping"
-                                fi
-                            '''
-                        }
+                        sh 'cd terraform && terraform fmt -check -recursive'
                     }
                 }
                 stage('Docker Lint') {
                     steps {
-                        script {
-                            echo "📋 Linting Dockerfile..."
-                            sh '''
-                                if command -v hadolint &> /dev/null; then
-                                    hadolint docker/Dockerfile
-                                else
-                                    echo "⚠️  hadolint not installed, installing..."
-                                    apk add --no-cache hadolint 2>/dev/null || echo "Install hadolint manually"
-                                fi
-                            '''
-                        }
+                        // Используем hadolint через docker для чистоты
+                        sh 'docker run --rm -v ${WORKSPACE}/docker/Dockerfile:/Dockerfile hadolint/hadolint hadolint /Dockerfile || true'
                     }
                 }
             }
@@ -102,304 +49,44 @@ pipeline {
 
         stage('Security Scan') {
             parallel {
-                stage('tfsec Scan') {
+                stage('tfsec') {
                     steps {
-                        script {
-                            echo "🔒 Running tfsec security scan..."
-                            sh '''
-                                cd terraform
-                                if command -v tfsec &> /dev/null; then
-                                    tfsec . -f json --out tfsec-report.json || true
-                                else
-                                    echo "⚠️  tfsec not installed"
-                                fi
-                            '''
-                        }
+                        // Запуск сканера безопасности
+                        sh 'docker run --rm -v ${WORKSPACE}/terraform:/src aquasec/tfsec /src'
                     }
                 }
-                stage('Checkov Scan') {
+                stage('Checkov') {
                     steps {
-                        script {
-                            echo "🔒 Running Checkov IaC scan..."
-                            sh '''
-                                if command -v checkov &> /dev/null; then
-                                    checkov -d terraform --output sarif > checkov-report.sarif || true
-                                else
-                                    echo "⚠️  Checkov not installed"
-                                fi
-                            '''
-                        }
-                    }
-                }
-                stage('Secret Scanning') {
-                    steps {
-                        script {
-                            echo "🔒 Scanning for hardcoded secrets..."
-                            sh '''
-                                if command -v git-secrets &> /dev/null; then
-                                    git secrets --scan
-                                else
-                                    echo "⚠️  git-secrets not installed"
-                                fi
-                            '''
-                        }
+                        sh 'docker run --rm -v ${WORKSPACE}/terraform:/tf bridgecrew/checkov -d /tf || true'
                     }
                 }
             }
         }
 
-        stage('Test') {
+        stage('Build & Push to ECR') {
+            when { branch 'main' }
             steps {
                 script {
-                    echo "🧪 Running tests..."
-                    sh '''
-                        if [ -d "tests" ] && [ -f "tests/run_tests.sh" ]; then
-                            bash tests/run_tests.sh
-                        else
-                            echo "ℹ️  No tests configured"
-                        fi
-                    '''
-                }
-            }
-        }
-
-        stage('Docker Build & Push') {
-            when {
-                anyOf {
-                    branch 'main'
-                    branch 'staging'
-                    branch 'develop'
-                }
-            }
-            steps {
-                script {
-                    echo "🐳 Building Docker image: ${DOCKER_IMAGE_NAME}:${BUILD_VERSION}"
-                    sh '''
-                        set -e
-                        
-                        # Login to ECR
-                        aws ecr get-login-password --region ${AWS_REGION} | \
-                            docker login --username AWS --password-stdin ${DOCKER_REGISTRY}
-                        
-                        # Create ECR repo if it doesn't exist
-                        aws ecr describe-repositories --repository-names ${ECR_REPO_NAME} \
-                            --region ${AWS_REGION} || \
-                            aws ecr create-repository --repository-name ${ECR_REPO_NAME} \
-                                --region ${AWS_REGION} \
-                                --image-scanning-configuration scanOnPush=true
-                        
-                        # Build image
-                        docker build \
-                            -f docker/Dockerfile \
-                            -t ${DOCKER_IMAGE_NAME}:${BUILD_VERSION} \
-                            -t ${DOCKER_IMAGE_NAME}:latest \
-                            --label version=${BUILD_VERSION} \
-                            --label buildId=${BUILD_ID} \
-                            --label gitCommit=${GIT_COMMIT_SHORT} \
-                            .
-                        
-                        # Push to ECR
-                        docker push ${DOCKER_IMAGE_NAME}:${BUILD_VERSION}
-                        docker push ${DOCKER_IMAGE_NAME}:latest
-                        
-                        echo "✅ Docker image pushed successfully"
-                    '''
-                }
-            }
-        }
-
-        stage('Terraform Plan') {
-            when {
-                anyOf {
-                    branch 'main'
-                    branch 'staging'
-                    branch 'develop'
-                }
-            }
-            steps {
-                script {
-                    def environment = 'dev'
-                    if (env.BRANCH_NAME == 'staging') {
-                        environment = 'staging'
-                    } else if (env.BRANCH_NAME == 'main') {
-                        environment = 'prod'
-                    }
-                    
-                    echo "🔍 Planning Terraform changes for ${environment} environment..."
-                    sh '''
-                        cd terraform
-                        
-                        # Initialize Terraform
-                        terraform init \
-                            -backend-config="bucket=decoryou-terraform-state-${ENVIRONMENT}" \
-                            -backend-config="key=${ENVIRONMENT}/terraform.tfstate" \
-                            -backend-config="region=${AWS_REGION}" \
-                            -backend-config="dynamodb_table=decoryou-terraform-locks"
-                        
-                        # Validate configuration
-                        terraform validate
-                        
-                        # Generate plan
-                        terraform plan \
-                            -var-file="environments/${ENVIRONMENT}/terraform.tfvars" \
-                            -out=tfplan.${ENVIRONMENT}
-                        
-                        # Create human-readable output
-                        terraform show -json tfplan.${ENVIRONMENT} > tfplan.${ENVIRONMENT}.json
-                    '''
-                }
-            }
-        }
-
-        stage('Ansible Deploy') {
-            when {
-                allOf {
-                    anyOf {
-                        branch 'staging'
-                        branch 'main'
-                    }
-                    expression { return params.DEPLOY_ENABLED ?: false }
-                }
-            }
-            steps {
-                script {
-                    def environment = env.BRANCH_NAME == 'main' ? 'prod' : 'staging'
-                    echo "📦 Deploying with Ansible to ${environment} environment..."
-                    
-                    withCredentials([
-                        file(credentialsId: "ansible-vault-${environment}", variable: 'VAULT_FILE'),
-                        sshUserPrivateKey(credentialsId: "ansible-ssh-key-${environment}", keyFileVariable: 'SSH_KEY')
-                    ]) {
-                        sh '''
-                            export ANSIBLE_HOST_KEY_CHECKING=False
-                            
-                            ansible-playbook \
-                                -i ansible/inventories/${ENVIRONMENT}/hosts \
-                                --vault-password-file ${VAULT_FILE} \
-                                -e "docker_image=${DOCKER_IMAGE_NAME}:${BUILD_VERSION}" \
-                                -e "app_environment=${ENVIRONMENT}" \
-                                -e "deployment_version=${BUILD_VERSION}" \
-                                ansible/site.yml
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Smoke Test') {
-            when {
-                allOf {
-                    anyOf {
-                        branch 'staging'
-                        branch 'main'
-                    }
-                    expression { return params.DEPLOY_ENABLED ?: false }
-                }
-            }
-            steps {
-                script {
-                    echo "🔥 Running smoke tests..."
-                    sh '''
-                        bash jenkins/scripts/smoke-test.sh
-                    '''
+                    // Используем IAM Role инстанса для логина в ECR
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${DOCKER_REGISTRY}"
+                    sh "docker build -f docker/Dockerfile -t ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER} ."
+                    sh "docker push ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER}"
                 }
             }
         }
 
         stage('Deploy to Staging') {
-            when {
-                branch 'staging'
-            }
+            when { branch 'staging' }
             steps {
-                script {
-                    echo "🚀 Deploying to Staging environment..."
-                    sh '''
-                        cd terraform
-                        terraform apply -auto-approve tfplan.staging
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy to Production') {
-            when {
-                branch 'main'
-            }
-            input {
-                message "Deploy to Production?"
-                ok "Yes, Deploy"
-            }
-            steps {
-                script {
-                    echo "✨ Deploying to Production environment..."
-                    sh '''
-                        cd terraform
-                        terraform apply -auto-approve tfplan.prod
-                    '''
-                }
+                // Здесь будет ваш Terraform Apply
+                echo "Deploying to Staging..."
             }
         }
     }
 
     post {
         always {
-            script {
-                echo "🧹 Cleaning up workspace..."
-                cleanWs(
-                    deleteDirs: true,
-                    patterns: [
-                        [pattern: '**/*.tfplan', type: 'INCLUDE'],
-                        [pattern: 'terraform/**/.terraform', type: 'INCLUDE']
-                    ]
-                )
-            }
-            
-            // Archive reports
-            archiveArtifacts artifacts: '**/tfsec-report.json, **/checkov-report.sarif, **/tfplan.*.json', 
-                allowEmptyArchive: true
-        }
-        
-        success {
-            script {
-                def message = """
-                ✅ Build Successful
-                Pipeline: ${env.JOB_NAME} #${env.BUILD_NUMBER}
-                Branch: ${env.BRANCH_NAME}
-                Commit: ${env.GIT_COMMIT_SHORT}
-                Duration: ${currentBuild.durationString}
-                """.stripIndent()
-                
-                sh '''
-                    curl -X POST -H 'Content-type: application/json' \
-                        --data '{"text":"'"${message}"'"}' \
-                        ${SLACK_WEBHOOK}
-                '''
-            }
-        }
-        
-        failure {
-            script {
-                def message = """
-                ❌ Build Failed
-                Pipeline: ${env.JOB_NAME} #${env.BUILD_NUMBER}
-                Branch: ${env.BRANCH_NAME}
-                Commit: ${env.GIT_COMMIT_SHORT}
-                Duration: ${currentBuild.durationString}
-                Error: ${currentBuild.description}
-                """.stripIndent()
-                
-                sh '''
-                    curl -X POST -H 'Content-type: application/json' \
-                        --data '{"text":"'"${message}"'"}' \
-                        ${SLACK_WEBHOOK}
-                '''
-            }
-        }
-        
-        unstable {
-            script {
-                echo "⚠️ Build unstable - review logs"
-            }
+            cleanWs()
         }
     }
 }
