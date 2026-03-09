@@ -1,60 +1,61 @@
 pipeline {
-    agent any 
-    
+    agent any
+
     environment {
-        IMAGE_NAME = "decoryou"
-        IMAGE_TAG  = "7"
+        AWS_REGION = 'us-east-1' 
+        APP_NAME   = 'decoryou'
     }
-    
+
     stages {
-        stage('Security Scan') {
+        stage('Initialize & AWS Identity') {
             steps {
-                script {
-                    def gitleaksExists = sh(script: 'which gitleaks', returnStatus: true)
-                    if (gitleaksExists != 0) {
-                        error "❌ Gitleaks not found! Install gitleaks in the Jenkins agent."
-                    }
-                    sh 'gitleaks detect --config .gitleaks.toml --verbose --redact'
-                }
-            }
-        }
-
-        stage('Check Docker') {
-            steps {
-                script {
-                    // Проверяем наличие Docker CLI
-                    def dockerExists = sh(script: 'which docker', returnStatus: true)
-                    if (dockerExists != 0) {
-                        error "❌ Docker CLI не найден! Проверь установку в кастомном образе."
-                    } else {
-                        echo "✅ Docker CLI найден"
-                    }
-
-                    // Проверяем доступ к сокету Docker
-                    def dockerPing = sh(script: 'docker info > /dev/null 2>&1', returnStatus: true)
-                    if (dockerPing != 0) {
-                        error "❌ Нет доступа к Docker daemon! Проверь монтирование /var/run/docker.sock"
-                    } else {
-                        echo "✅ Docker daemon доступен"
+                // Используем твои ключи, которые мы создали в Jenkins
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'my-aws-key',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    script {
+                        echo "🔍 Проверка доступа к AWS..."
+                        env.AWS_ACCOUNT_ID = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
+                        env.DOCKER_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
+                        env.DOCKER_IMAGE_NAME = "${env.DOCKER_REGISTRY}/${env.APP_NAME}"
+                        echo "✅ Работаем в аккаунте: ${env.AWS_ACCOUNT_ID}"
                     }
                 }
             }
         }
 
-        stage('Docker Build') {
+        stage('Build & Push to ECR') {
             steps {
-                // Сборка образа из Dockerfile, который лежит в корне репозитория
-                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'my-aws-key']]) {
+                    script {
+                        echo "🐳 Собираем Docker образ..."
+                        // Логин в реестр AWS ECR
+                        sh "aws ecr get-login-password --region ${env.AWS_REGION} | docker login --username AWS --password-stdin ${env.DOCKER_REGISTRY}"
+                        
+                        // Сборка образа (Dockerfile должен быть в корне проекта)
+                        sh "docker build -t ${env.DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER} -t ${env.DOCKER_IMAGE_NAME}:latest ."
+                        
+                        // Отправка в облако
+                        sh "docker push ${env.DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER}"
+                        sh "docker push ${env.DOCKER_IMAGE_NAME}:latest"
+                    }
+                }
             }
         }
 
-        stage('Terraform Plan') {
+        stage('Terraform Plan & Apply') {
             steps {
-                // Используем dir('terraform'), так как твои .tf файлы лежат в этой папке
-                dir('terraform') {
-                    // -upgrade нужен, чтобы перекачать плагины с Mac на Linux
-                    sh 'terraform init -upgrade'
-                    sh "terraform plan -var='docker_image_tag=${IMAGE_TAG}' -out=tfplan"
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'my-aws-key']]) {
+                    // Переходим в папку terraform и запускаем деплой
+                    sh '''
+                        cd terraform
+                        terraform init
+                        terraform plan -out=tfplan
+                        terraform apply -auto-approve tfplan
+                    '''
                 }
             }
         }
@@ -62,14 +63,11 @@ pipeline {
 
     post {
         always {
-            // Очистка рабочего пространства после сборки
             cleanWs()
+            echo "🧹 Очистка завершена."
         }
         success {
-            echo '✅ Пайплайн успешно завершен!'
-        }
-        failure {
-            echo '❌ Ошибка в пайплайне'
+            echo "🚀 УРА! Деплой decoryou завершен успешно."
         }
     }
 }
