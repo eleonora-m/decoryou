@@ -13,7 +13,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket  = "nora-terra"
+    bucket  = "decor-you"
     key     = "prod/terraform.tfstate"
     region  = "us-east-2"
     encrypt = true
