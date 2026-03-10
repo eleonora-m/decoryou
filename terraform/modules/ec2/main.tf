@@ -59,9 +59,9 @@ resource "aws_launch_template" "app" {
 
   lifecycle {
     create_before_destroy = true
-  }
+  }# depends_on = [aws_cloudwatch_log_group.app]
 
-  depends_on = [aws_cloudwatch_log_group.app]
+  
 }
 
 # Auto Scaling Group

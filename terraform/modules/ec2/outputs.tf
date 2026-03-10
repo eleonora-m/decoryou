@@ -17,7 +17,7 @@ output "launch_template_id" {
   value       = aws_launch_template.app.id
 }
 
-output "log_group_name" {
-  description = "Name of CloudWatch log group"
-  value       = aws_cloudwatch_log_group.app.name
+/* output "log_group_name" {
+  value = aws_cloudwatch_log_group.app.name 
 }
+*/
