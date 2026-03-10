@@ -110,7 +110,7 @@ variable "instance_type" {
 variable "ami_id" {
   description = "AMI ID for EC2"
   type        = string
-  default     = "ami-0c94855ba95c574c8"
+  default     = "ami-05fb0b8c1424f266b" # Актуально для us-east-2
 }
 
 variable "key_pair_name" {
