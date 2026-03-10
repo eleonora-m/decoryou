@@ -120,6 +120,33 @@ variable "key_pair_name" {
 }
 
 # ============================================================================
+# EC2 AUTO SCALING CONFIGURATION
+# ============================================================================
+variable "desired_capacity" {
+  description = "Desired number of EC2 instances in the Auto Scaling Group"
+  type        = number
+  default     = 2
+}
+
+variable "min_size" {
+  description = "Minimum number of EC2 instances in the Auto Scaling Group"
+  type        = number
+  default     = 1
+}
+
+variable "max_size" {
+  description = "Maximum number of EC2 instances in the Auto Scaling Group"
+  type        = number
+  default     = 4
+}
+
+variable "enable_detailed_monitoring" {
+  description = "Enable detailed CloudWatch monitoring for EC2 instances"
+  type        = bool
+  default     = false
+}
+
+# ============================================================================
 # APP & S3 CONFIGURATION
 # ============================================================================
 variable "app_port" {
