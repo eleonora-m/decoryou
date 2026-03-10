@@ -56,19 +56,20 @@ pipeline {
             }
         }
 
-      stage('Terraform Plan & Apply') {
+        stage('Terraform Plan & Apply') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'my-aws-key']]) {
                     sh '''
                         cd terraform
                         terraform init
-                        # Передаем переменные напрямую, чтобы Jenkins не задавал вопросов
                         terraform plan -var="environment=prod" -var="aws_region=us-east-2" -var="project_name=decoryou" -out=tfplan
                         terraform apply -auto-approve tfplan
                     '''
                 }
             }
         }
+    } // Вот эта скобка закрывает блок STAGES
+
     post {
         always {
             cleanWs()

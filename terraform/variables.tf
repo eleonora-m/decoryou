@@ -21,6 +21,7 @@ variable "aws_region" {
 variable "environment" {
   description = "Environment name (dev, staging, prod)"
   type        = string
+  default     = "prod"  # Добавь эту строку!
 
   validation {
     condition     = contains(["dev", "staging", "prod"], var.environment)
