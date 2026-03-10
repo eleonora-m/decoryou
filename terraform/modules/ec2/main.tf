@@ -154,14 +154,9 @@ resource "aws_cloudwatch_metric_alarm" "cpu_low" {
 }
 
 # CloudWatch Log Group for application logs
+/*
 resource "aws_cloudwatch_log_group" "app" {
-  name              = "/aws/${var.project_name}/${var.environment}/app"
-  retention_in_days = var.log_retention_days
-
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.project_name}-logs-${var.environment}"
-    }
-  )
+  name              = "/aws/decoryou/prod/app"
+  retention_in_days = 7
 }
+*/
