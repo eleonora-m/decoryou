@@ -56,7 +56,7 @@ resource "aws_s3_bucket_versioning" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state[0].id
 
   versioning_configuration {
-    status = "Enabled"
+    status     = "Enabled"
     mfa_delete = var.enable_mfa_delete ? "Enabled" : "Disabled"
   }
 }
@@ -143,6 +143,8 @@ resource "aws_s3_bucket_logging" "app" {
   target_prefix = "logs/app/"
 }
 
+# Lifecycle configuration for Terraform state bucket
+# ИСПРАВЛЕНО: добавлен обязательный блок filter
 resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
   count  = var.create_terraform_state_bucket ? 1 : 0
   bucket = aws_s3_bucket.terraform_state[0].id
@@ -150,6 +152,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
   rule {
     id     = "delete-old-versions"
     status = "Enabled"
+
+    filter {}
 
     noncurrent_version_expiration {
       noncurrent_days = 90
