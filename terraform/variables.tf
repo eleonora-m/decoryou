@@ -5,12 +5,10 @@
 # ============================================================================
 # GENERAL CONFIGURATION
 # ============================================================================
-
 variable "aws_region" {
   description = "AWS region for resource deployment"
   type        = string
   default     = "us-east-2"
-
   validation {
     condition     = can(regex("^us-|^eu-|^ap-", var.aws_region))
     error_message = "AWS region must be valid (e.g., us-east-2, eu-west-2)"
@@ -21,7 +19,6 @@ variable "environment" {
   description = "Environment name (dev, staging, prod)"
   type        = string
   default     = "prod"
-
   validation {
     condition     = contains(["dev", "staging", "prod"], var.environment)
     error_message = "Environment must be one of: dev, staging, prod"
@@ -32,7 +29,6 @@ variable "project_name" {
   description = "Project name for resource naming and tagging"
   type        = string
   default     = "decoryou"
-
   validation {
     condition     = length(var.project_name) <= 32 && can(regex("^[a-z0-9-]+$", var.project_name))
     error_message = "Project name must be lowercase alphanumeric with hyphens"
@@ -54,7 +50,6 @@ variable "cost_center" {
 # ============================================================================
 # VPC & NETWORKING
 # ============================================================================
-
 variable "vpc_cidr" {
   description = "CIDR block for VPC"
   type        = string
@@ -106,7 +101,6 @@ variable "ssh_cidr_blocks" {
 # ============================================================================
 # EC2 CONFIGURATION
 # ============================================================================
-
 variable "instance_type" {
   description = "EC2 instance type"
   type        = string
@@ -128,7 +122,6 @@ variable "key_pair_name" {
 # ============================================================================
 # APP & S3 CONFIGURATION
 # ============================================================================
-
 variable "app_port" {
   description = "Application port"
   type        = number
@@ -142,12 +135,84 @@ variable "docker_image" {
 }
 
 variable "s3_enable_versioning" {
-  type    = bool
-  default = true
+  description = "Enable versioning for S3 buckets"
+  type        = bool
+  default     = true
 }
 
+variable "create_s3_app_bucket" {
+  description = "Whether to create the application S3 bucket"
+  type        = bool
+  default     = true
+}
+
+variable "create_terraform_state_bucket" {
+  description = "Whether to create the Terraform state S3 bucket"
+  type        = bool
+  default     = false
+}
+
+variable "create_artifacts_bucket" {
+  description = "Whether to create the artifacts S3 bucket"
+  type        = bool
+  default     = true
+}
+
+variable "s3_enable_encryption" {
+  description = "Enable server-side encryption for S3 buckets"
+  type        = bool
+  default     = true
+}
+
+variable "s3_enable_mfa_delete" {
+  description = "Enable MFA delete protection on S3 buckets"
+  type        = bool
+  default     = false
+}
+
+# ============================================================================
+# ALB CONFIGURATION
+# ============================================================================
+variable "enable_alb_deletion_protection" {
+  description = "Enable deletion protection on the Application Load Balancer"
+  type        = bool
+  default     = true
+}
+
+# ============================================================================
+# EKS CONFIGURATION
+# ============================================================================
+variable "eks_cluster_name" {
+  description = "Name of the EKS cluster"
+  type        = string
+  default     = "decoryou-eks"
+}
+
+variable "eks_oidc_provider_arn" {
+  description = "ARN of the EKS OIDC provider for IAM roles"
+  type        = string
+  default     = ""
+}
+
+# ============================================================================
+# CLOUDWATCH / LOGGING
+# ============================================================================
+variable "log_retention_days" {
+  description = "Number of days to retain CloudWatch logs"
+  type        = number
+  default     = 30
+  validation {
+    condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653], var.log_retention_days)
+    error_message = "log_retention_days must be a valid CloudWatch retention period."
+  }
+}
+
+# ============================================================================
+# COMMON TAGS
+# ============================================================================
 variable "common_tags" {
-  type = map(string)
+  description = "Common tags applied to all resources"
+  type        = map(string)
   default = {
     Terraform = "true"
     Project   = "decoryou"
