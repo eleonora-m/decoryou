@@ -10,11 +10,11 @@
 variable "aws_region" {
   description = "AWS region for resource deployment"
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
 
   validation {
     condition     = can(regex("^us-|^eu-|^ap-", var.aws_region))
-    error_message = "AWS region must be valid (e.g., us-east-1, eu-west-1, ap-southeast-1)"
+    error_message = "AWS region must be valid (e.g.,us-east-2, eu-west-2, ap-southeast-2)"
   }
 }
 
@@ -67,15 +67,14 @@ variable "vpc_cidr" {
   }
 }
 
-variable "availability_zones" {
-  description = "List of availability zones"
-  type        = list(string)
-  default     = ["us-east-1a", "us-east-1b", "us-east-1c"]
+vvariable "availability_zones" {
+  type    = list(string)
+  default = ["us-east-2a", "us-east-2b", "us-east-2c"]
+}
 
-  validation {
-    condition     = length(var.availability_zones) >= 2
-    error_message = "Must specify at least 2 availability zones"
-  }
+variable "availability_zones" {
+  type    = list(string)
+  default = ["us-east-2a", "us-east-2b", "us-east-2c"]
 }
 
 variable "public_subnet_cidrs" {
