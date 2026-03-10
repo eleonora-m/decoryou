@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1' 
+        AWS_REGION = 'us-east-2' 
         APP_NAME   = 'decoryou'
         TF_IN_AUTOMATION = 'true'
     }
@@ -10,7 +10,6 @@ pipeline {
     stages {
         stage('Initialize & AWS Identity') {
             steps {
-                // Используем твои ключи 'my-aws-key'
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'my-aws-key',
@@ -18,30 +17,26 @@ pipeline {
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
                     script {
-                        echo "🔍 Идентификация в AWS..."
+                        echo "🔍 AWS Identification..."
                         env.AWS_ACCOUNT_ID = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
                         env.DOCKER_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
                         env.DOCKER_IMAGE_NAME = "${env.DOCKER_REGISTRY}/${env.APP_NAME}"
-                        echo "✅ Аккаунт: ${env.AWS_ACCOUNT_ID}"
+                        echo "✅ Account: ${env.AWS_ACCOUNT_ID}"
                     }
                 }
             }
         }
 
-        stage('Quality & Security Gate') {
+        stage('Quality Gate') {
             parallel {
                 stage('Terraform Lint') {
                     steps {
-                        echo "Проверка синтаксиса Terraform..."
-                        // Если папка terraform есть, проверяем её
-                        sh 'terraform -chdir=terraform fmt -check || echo "Пропустить линт"'
+                        sh 'terraform -chdir=terraform fmt -check || echo "Lint skipped"'
                     }
                 }
                 stage('Docker Lint') {
                     steps {
-                        echo "Проверка Dockerfile..."
-                        // Проверь, где лежит Dockerfile. Если в корне, то просто '.'
-                        sh 'docker run --rm -i hadolint/hadolint < Dockerfile || echo "Hadolint не найден, пропускаем"'
+                        sh 'docker run --rm -i hadolint/hadolint < Dockerfile || echo "Hadolint skipped"'
                     }
                 }
             }
@@ -51,14 +46,9 @@ pipeline {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'my-aws-key']]) {
                     script {
-                        echo "🐳 Сборка образа ${env.DOCKER_IMAGE_NAME}..."
-                        // Логин в ECR
+                        echo "🐳 Building image ${env.DOCKER_IMAGE_NAME}..."
                         sh "aws ecr get-login-password --region ${env.AWS_REGION} | docker login --username AWS --password-stdin ${env.DOCKER_REGISTRY}"
-                        
-                        // Сборка (убедись, что Dockerfile в корне проекта)
                         sh "docker build -t ${env.DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER} -t ${env.DOCKER_IMAGE_NAME}:latest ."
-                        
-                        // Пуш в облако
                         sh "docker push ${env.DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER}"
                         sh "docker push ${env.DOCKER_IMAGE_NAME}:latest"
                     }
@@ -72,7 +62,7 @@ pipeline {
                     sh '''
                         cd terraform
                         terraform init
-                        terraform plan -out=tfplan
+                        terraform plan -var="environment=prod" -var="aws_region=us-east-2" -var="project_name=decoryou" -out=tfplan
                         terraform apply -auto-approve tfplan
                     '''
                 }
@@ -83,10 +73,10 @@ pipeline {
     post {
         always {
             cleanWs()
-            echo "🧹 Очистка рабочего пространства завершена."
+            echo "🧹 Cleanup completed."
         }
         success {
-            echo "🚀 ПРОДАКШН ГОТОВ! Сайт decoryou должен быть доступен."
+            echo "🚀 PRODUCTION READY! Decoryou deployment successful."
         }
     }
 }
