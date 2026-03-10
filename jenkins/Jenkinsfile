@@ -62,13 +62,13 @@ pipeline {
                     sh '''
                         cd terraform
                         terraform init
+                        # Передаем переменные напрямую, чтобы Jenkins не задавал вопросов
                         terraform plan -var="environment=prod" -var="aws_region=us-east-2" -var="project_name=decoryou" -out=tfplan
                         terraform apply -auto-approve tfplan
                     '''
                 }
             }
         }
-    }
 
     post {
         always {
